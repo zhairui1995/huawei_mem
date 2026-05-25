@@ -19,7 +19,7 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 # ====== 配置 ======
-CLANG="D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm/bin/clang.exe"
+CLANG="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/native/llvm/bin/clang"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MEMCAP_SRC="$PROJECT_DIR/memcap.c"
 MEMCAP_BIN="$PROJECT_DIR/memcap"
@@ -114,7 +114,7 @@ if [[ "$DO_PUSH" == true ]]; then
     fi
     "$CLANG" -O2 -std=c11 -Wall -Wextra \
         -target aarch64-linux-ohos \
-        --sysroot="D:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/sysroot" \
+        --sysroot="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/native/sysroot" \
         -o "$MEMCAP_BIN" "$MEMCAP_SRC"
     echo "      编译完成: $MEMCAP_BIN"
 
