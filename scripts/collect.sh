@@ -21,6 +21,15 @@
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
+# ====== hdc 自动检测 ======
+if ! command -v hdc &>/dev/null; then
+    if [ -f "$HOME/Library/OpenHarmony/Sdk/23/toolchains/hdc" ]; then
+        export PATH="$HOME/Library/OpenHarmony/Sdk/23/toolchains:$PATH"
+    elif [ -f "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc" ]; then
+        export PATH="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains:$PATH"
+    fi
+fi
+
 # ====== 配置：自动检测平台 ======
 SDK_BASE=""
 if [[ -d "/Applications/DevEco-Studio.app" ]]; then

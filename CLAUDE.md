@@ -2,103 +2,114 @@
 
 ## 项目概述
 
-本项目的目标是在 **Windows 主机端**，通过 **hdc (HarmonyOS Device Connector)** 连接鸿蒙 PC 设备，对指定进程 PID 进行一次性的内存页快照采集，输出 CSV 数据供后续分析。
+通过 **hdc** 连接鸿蒙 PC 设备，对目标进程做内存页快照采集（单次瞬时），输出 CSV 供分析。
 
-**当前阶段：** 单文件 C 程序，每次运行做一次瞬时快照。不做高频监控，不做 ArkTS 应用。
+- 主机端：macOS (MacBook Air) 或 Windows，通过 hdc USB/网络连接设备
+- 设备端：HUAWEI MateBook Pro HAD-W32，HongMeng Kernel 1.12.0，aarch64
+- 采集程序：单文件 C11（memcap.c），交叉编译为 aarch64 ELF
 
-## 技术路线
+## 环境初始化（重要）
 
-```
-人工操作应用 → 主机端记录 sample_id/operation_id → hdc shell 获取 PID
-→ 运行设备侧 C 程序 memcap → 读取 maps/smaps/pagemap
-→ 输出 CSV → hdc file recv 拉回 → 后处理分析
-```
-
-## 核心概念
-
-- **memcap**: 设备端 C 程序，编译后通过 `hdc file send` 推送到 `/data/local/tmp/memcap/`
-- **3 张自动采集表**: `snapshot_index.csv`, `vma_memory_snapshot.csv`, `pagemap_snapshot.csv`
-- **3 张人工/主机端维护表**: `app_list.csv`, `operation_list.csv`, `future_need_label.csv`
-
-## 6 张数据表说明
-
-| 表名 | 维护方式 | 粒度 |
-|------|---------|------|
-| `app_list.csv` | 人工维护 | 每个应用一行 |
-| `operation_list.csv` | 人工/主机端维护 | 每次操作一行 |
-| `snapshot_index.csv` | C 程序追加一行 | 每次快照一行 |
-| `vma_memory_snapshot.csv` | C 程序追加多行 | 每个 VMA 一行，合并 maps + smaps |
-| `pagemap_snapshot.csv` | C 程序追加多行 | 每个 VMA 一行，按 VMA 聚合 pagemap |
-| `future_need_label.csv` | 先只生成表头，后续人工/模型填写 | 按 VMA 标注 |
-
-## 一键采集（推荐）
+所有 hdc 相关命令前，先 source 环境脚本：
 
 ```bash
-# 在 Windows 主机端（Git Bash），一行完成：编译 → 推送 → 采集 → 拉回
-./scripts/collect.sh <PID> [应用名]
-
-# 示例
-./scripts/collect.sh 42820 斗鱼
-./scripts/collect.sh 42820 斗鱼 -o op_launch
-./scripts/collect.sh 42820                # 自动从设备获取进程名
+source scripts/setup_env.sh
 ```
 
-脚本自动完成 4 步：
-1. 交叉编译 memcap.c
-2. `hdc file send` 推送到 `/data/local/tmp/memcap/`
-3. `hdc shell` 运行采集（auto 生成 sample_id / operation_id）
-4. `hdc file recv` 拉回结果到 `memcap_out/`
+此后 `hdc` 直接可用，无需每次指定完整路径。
 
-## 手动编译与部署
+## 快速采集
 
 ```bash
-# 交叉编译（使用 DevEco Studio / HarmonyOS SDK 的 native clang）
-"$OHOS_SDK/native/llvm/bin/clang.exe" -O2 -std=c11 -Wall -Wextra \
-    -target aarch64-linux-ohos \
-    --sysroot="$OHOS_SDK/native/sysroot" \
-    -o memcap memcap.c
+source scripts/setup_env.sh
 
-# 推送到设备
-hdc shell mkdir -p /data/local/tmp/memcap
-hdc file send memcap /data/local/tmp/memcap/memcap
-hdc shell chmod 755 /data/local/tmp/memcap/memcap
+# 按进程名搜索并采集
+bash scripts/collect.sh douyu
+bash scripts/collect.sh 斗鱼 --all          # 采集所有子进程
 
-# 运行快照采集
-hdc shell '/data/local/tmp/memcap/memcap <pid> /data/local/tmp/memcap/out <sample_id> <operation_id> <app_id> <app_name> <process_name> <snapshot_index> <foreground_state>'
+# 指定 PID
+bash scripts/collect.sh 9376 斗鱼
+bash scripts/collect.sh 9376 斗鱼 -f background -o op_switch_room
 
-# 拉回结果
-hdc file recv /data/local/tmp/memcap/out ./memcap_out
+# 跳过推送（设备上已有 memcap 二进制）
+bash scripts/collect.sh 9376 斗鱼 --no-push
 ```
 
-> Windows Git Bash 下注意：所有 hdc 命令前需加 `MSYS_NO_PATHCONV=1`，否则 Unix 路径会被 MSYS2 错误转换。
+## 对比分析
 
-## 关键实现要点
+```bash
+# 对比所有斗鱼快照（自动选择 exact/fuzzy 模式）
+python3 scripts/analyze_memory.py -i memcap_out/ --pid 9376
 
-1. **page_size** 必须用 `sysconf(_SC_PAGESIZE)`，不要写死 4096
-2. **pagemap 读取**按 VMA 聚合，不要每页一行输出 CSV
-3. **pagemap bit 规则**: bit63=present, bit62=swapped, bit61=file/shared-anon, bit56=exclusive, bit55=soft-dirty
-4. **PFN** 不作为第一版指标（受 CAP_SYS_ADMIN 限制，权限不足时被置零）
-5. **pagemap 权限失败不崩溃**，scan_status 字段写 `open_pagemap_failed`
-6. **smaps 读取不到的字段默认填 0**（不填 -1），避免 CSV 分析时误判
-7. **VMA 和 pagemap 输出先写 `.tmp.<pid>` 临时文件**，写完再追加到共享 CSV，防止两个 memcap 并发写同一文件时交叉损坏
-8. **不要同时运行两个 memcap 到同一个 out_dir**，虽然已用临时文件降低风险，但 snapshot_index 的追加仍可能交叉
+# fuzzy 模式（跨重启，PID 不同）
+python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.8
 
-## 文件结构（规划）
+# 只对比指定快照
+python3 scripts/analyze_memory.py -i memcap_out/ \
+    --sample sample_001 sample_002 sample_003
+
+# 输出完整列表
+python3 scripts/analyze_memory.py -i memcap_out/ --full
+```
+
+**匹配模式**：
+- `exact`：按 (vma_start, vma_end) 匹配 → PID 不变时用
+- `fuzzy`：按 (pathname, region_type, perms) 匹配 → PID 变化时用
+- `auto`：自动检测（默认）
+
+## 常用 hdc 命令速查
+
+```bash
+source scripts/setup_env.sh
+
+hdc list targets                    # 查看连接设备
+hdc shell "ps -A -o PID,ARGS"      # 列出所有进程
+hdc shell "pidof com.douyu.ho.app" # 查找应用 PID
+hdc shell "cat /proc/9376/cmdline | tr '\0' ' '"  # 查看进程命令行
+```
+
+## 项目文件结构
 
 ```
 huawei_mem/
-├── memcap.c               # 主程序（设备端 C 采集程序）
-├── CLAUDE.md              # 本规则文件
+├── memcap.c                       # 设备端 C 采集程序（342行）
 ├── .gitignore
 ├── scripts/
-│   └── collect.sh         # 一键采集脚本（编译+推送+采集+拉回）
-├── docs/                  # 后续添加，文档
-└── memcap_out/            # 拉回的 CSV 结果（gitignore）
+│   ├── setup_env.sh               # 环境初始化（hdc/clang PATH）
+│   ├── collect.sh                 # 一键采集脚本（编译+推送+采集+拉回）
+│   └── analyze_memory.py          # 跨快照持久性对比分析
+├── docs/
+│   ├── douyu_experiment_report.html  # 斗鱼三次采集实验报告
+│   ├── progress_dashboard.html       # 项目进展看板
+│   ├── progress_report.md            # 项目进展文档
+│   └── report_001_douyu.md           # 斗鱼首次采集报告
+└── memcap_out/                    # CSV 采集结果（gitignore）
 ```
+
+## 6 张 CSV 表
+
+| 表 | 维护 | 粒度 |
+|----|------|------|
+| snapshot_index.csv | C 程序追加 | 每次快照一行 |
+| vma_memory_snapshot.csv | C 程序追加 | 每个 VMA 一行（maps+smaps） |
+| pagemap_snapshot.csv | C 程序追加 | 每个 VMA 一行（pagemap 聚合） |
+| app_list.csv | 人工 | 每个应用一行 |
+| operation_list.csv | 人工 | 每次操作一行 |
+| future_need_label.csv | 待定 | 按 VMA 标注 |
+
+## 关键实现要点
+
+1. page_size 用 `sysconf(_SC_PAGESIZE)`，不写死 4096
+2. pagemap 按 VMA 聚合，不逐页输出 CSV
+3. pagemap bit: 63=present, 62=swapped, 61=file/shared, 56=exclusive, 55=soft-dirty
+4. pagemap 权限失败不崩溃，写 `scan_status=open_pagemap_failed`
+5. smaps 读取不到的字段填 0，不填 -1
+6. VMA/pagemap 先写 `.tmp.PID` 临时文件再追加，防并发交叉损坏
+7. 不要同时跑两个 memcap 到同一 out_dir
 
 ## 工作约定
 
-- 每次 git 提交写清楚改动内容和原因，方便回溯
-- 代码修改优先保留可运行的单文件形态，后续再拆分模块
-- 涉及 /proc 接口的行为以 Linux 内核文档和 HarmonyOS 实际表现为准
-- C 代码风格：C11 标准，简洁优先，不引入不必要的外部依赖
+- 提交信息写清改动原因
+- C 代码 C11 标准，不引入外部依赖；Python 纯 stdlib
+- 涉及 /proc 行为以 Linux 内核文档和 HarmonyOS 实际表现为准
+- hdc 命令先 `source scripts/setup_env.sh`
