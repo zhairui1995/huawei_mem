@@ -11,6 +11,7 @@
 
 #define MAX_VMAS 200000
 #define LINE_BUF 8192
+#define COPY_BUF 65536
 
 typedef struct {
     unsigned long start, end, offset, inode;
@@ -50,6 +51,22 @@ static void csv_escape(FILE *f, const char *s) {
     fputc('"', f);
 }
 
+static void append_temp_to_file(const char *tmp_path, const char *dest_path) {
+    FILE *src = fopen(tmp_path, "r");
+    if (!src) return;
+    FILE *dest = fopen(dest_path, "a");
+    if (!dest) { fclose(src); return; }
+    char *buf = (char *)malloc(COPY_BUF);
+    if (!buf) { fclose(src); fclose(dest); return; }
+    size_t n;
+    while ((n = fread(buf, 1, COPY_BUF, src)) > 0)
+        fwrite(buf, 1, n, dest);
+    free(buf);
+    fclose(src);
+    fclose(dest);
+    unlink(tmp_path);
+}
+
 static void classify_region(VMA *v) {
     const char *p = v->pathname;
     if (strstr(p, "[heap]")) strcpy(v->region_type, "heap");
@@ -81,7 +98,7 @@ static int parse_maps(int pid, VMA *vmas, int *nvma) {
         } else {
             v.pathname[0] = 0;
         }
-        v.rss_kb = v.pss_kb = v.referenced_kb = v.anonymous_kb = v.swap_kb = -1;
+        v.rss_kb = v.pss_kb = v.referenced_kb = v.anonymous_kb = v.swap_kb = 0;
         classify_region(&v);
         vmas[n++] = v;
     }
@@ -187,10 +204,11 @@ static void append_snapshot_index(const char *outdir, const char *sample_id, con
 
 static void write_vma_csv(const char *outdir, VMA *vmas, int nvma, const char *sample_id, const char *operation_id,
     const char *app_id, const char *app_name, const char *process_name, int pid,
-    long long ts, const char *snapshot_index, const char *fg) {
-    char p[1024];
-    snprintf(p, sizeof(p), "%s/vma_memory_snapshot.csv", outdir);
-    FILE *f = fopen(p, "a");
+    long long ts, const char *snapshot_index) {
+    char dest[1024], tmp[1024];
+    snprintf(dest, sizeof(dest), "%s/vma_memory_snapshot.csv", outdir);
+    snprintf(tmp, sizeof(tmp), "%s/vma_memory_snapshot.csv.tmp.%d", outdir, pid);
+    FILE *f = fopen(tmp, "w");
     if (!f) return;
 
     for (int i=0; i<nvma; ++i) {
@@ -209,6 +227,7 @@ static void write_vma_csv(const char *outdir, VMA *vmas, int nvma, const char *s
         fprintf(f, ",\n");
     }
     fclose(f);
+    append_temp_to_file(tmp, dest);
 }
 
 #define PM_PRESENT(e)    (((e) >> 63) & 1ULL)
@@ -219,13 +238,14 @@ static void write_vma_csv(const char *outdir, VMA *vmas, int nvma, const char *s
 
 static void write_pagemap_csv(const char *outdir, VMA *vmas, int nvma, const char *sample_id, const char *operation_id,
     const char *app_id, const char *app_name, const char *process_name, int pid,
-    long long ts, const char *snapshot_index, const char *fg) {
-    char pm_path[256], out_path[1024];
+    long long ts, const char *snapshot_index) {
+    char pm_path[256], dest[1024], tmp[1024];
     snprintf(pm_path, sizeof(pm_path), "/proc/%d/pagemap", pid);
     int fd = open(pm_path, O_RDONLY);
 
-    snprintf(out_path, sizeof(out_path), "%s/pagemap_snapshot.csv", outdir);
-    FILE *f = fopen(out_path, "a");
+    snprintf(dest, sizeof(dest), "%s/pagemap_snapshot.csv", outdir);
+    snprintf(tmp, sizeof(tmp), "%s/pagemap_snapshot.csv.tmp.%d", outdir, pid);
+    FILE *f = fopen(tmp, "w");
     if (!f) return;
 
     long page_size = sysconf(_SC_PAGESIZE);
@@ -273,6 +293,7 @@ static void write_pagemap_csv(const char *outdir, VMA *vmas, int nvma, const cha
 
     if (fd >= 0) close(fd);
     fclose(f);
+    append_temp_to_file(tmp, dest);
 }
 
 int main(int argc, char **argv) {
@@ -312,8 +333,8 @@ int main(int argc, char **argv) {
     parse_smaps(pid, vmas, nvma);
 
     append_snapshot_index(outdir, sample_id, operation_id, app_id, app_name, process_name, pid, ts, snapshot_index, fg, "success", "");
-    write_vma_csv(outdir, vmas, nvma, sample_id, operation_id, app_id, app_name, process_name, pid, ts, snapshot_index, fg);
-    write_pagemap_csv(outdir, vmas, nvma, sample_id, operation_id, app_id, app_name, process_name, pid, ts, snapshot_index, fg);
+    write_vma_csv(outdir, vmas, nvma, sample_id, operation_id, app_id, app_name, process_name, pid, ts, snapshot_index);
+    write_pagemap_csv(outdir, vmas, nvma, sample_id, operation_id, app_id, app_name, process_name, pid, ts, snapshot_index);
 
     free(vmas);
     return 0;
