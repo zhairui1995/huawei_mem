@@ -13,7 +13,7 @@
 所有 hdc 相关命令前，先 source 环境脚本：
 
 ```bash
-source scripts/setup_env.sh
+source scripts/device/setup_env.sh
 ```
 
 此后 `hdc` 直接可用，无需每次指定完整路径。
@@ -21,35 +21,35 @@ source scripts/setup_env.sh
 ## 快速采集
 
 ```bash
-source scripts/setup_env.sh
+source scripts/device/setup_env.sh
 
 # 按进程名搜索并采集
-bash scripts/collect.sh douyu
-bash scripts/collect.sh 斗鱼 --all          # 采集所有子进程
+bash scripts/device/collect.sh douyu
+bash scripts/device/collect.sh 斗鱼 --all          # 采集所有子进程
 
 # 指定 PID
-bash scripts/collect.sh 9376 斗鱼
-bash scripts/collect.sh 9376 斗鱼 -f background -o op_switch_room
+bash scripts/device/collect.sh 9376 斗鱼
+bash scripts/device/collect.sh 9376 斗鱼 -f background -o op_switch_room
 
 # 跳过推送（设备上已有 memcap 二进制）
-bash scripts/collect.sh 9376 斗鱼 --no-push
+bash scripts/device/collect.sh 9376 斗鱼 --no-push
 ```
 
 ## 对比分析
 
 ```bash
 # 对比所有斗鱼快照（自动选择 exact/fuzzy 模式）
-python3 scripts/analyze_memory.py -i memcap_out/ --pid 9376
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --pid 9376
 
 # fuzzy 模式（跨重启，PID 不同）
-python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.8
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.8
 
 # 只对比指定快照
-python3 scripts/analyze_memory.py -i memcap_out/ \
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ \
     --sample sample_001 sample_002 sample_003
 
 # 输出完整列表
-python3 scripts/analyze_memory.py -i memcap_out/ --full
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --full
 ```
 
 **匹配模式**：
@@ -60,7 +60,7 @@ python3 scripts/analyze_memory.py -i memcap_out/ --full
 ## 常用 hdc 命令速查
 
 ```bash
-source scripts/setup_env.sh
+source scripts/device/setup_env.sh
 
 hdc list targets                    # 查看连接设备
 hdc shell "ps -A -o PID,ARGS"      # 列出所有进程
@@ -75,9 +75,13 @@ huawei_mem/
 ├── memcap.c                       # 设备端 C 采集程序（342行）
 ├── .gitignore
 ├── scripts/
-│   ├── setup_env.sh               # 环境初始化（hdc/clang PATH）
-│   ├── collect.sh                 # 一键采集脚本（编译+推送+采集+拉回）
-│   └── analyze_memory.py          # 跨快照持久性对比分析
+│   ├── device/
+│   │   ├── setup_env.sh           # 环境初始化（hdc/clang PATH）
+│   │   └── collect.sh             # 一键采集脚本（编译+推送+采集+拉回）
+│   ├── analysis/
+│   │   └── analyze_memory.py      # 跨快照持久性对比分析
+│   └── pipeline/
+│       └── run_first_stage.sh     # 第一阶段流水线入口脚本
 ├── docs/
 │   ├── douyu_experiment_report.html  # 斗鱼三次采集实验报告
 │   ├── progress_dashboard.html       # 项目进展看板
@@ -112,4 +116,4 @@ huawei_mem/
 - 提交信息写清改动原因
 - C 代码 C11 标准，不引入外部依赖；Python 纯 stdlib
 - 涉及 /proc 行为以 Linux 内核文档和 HarmonyOS 实际表现为准
-- hdc 命令先 `source scripts/setup_env.sh`
+- hdc 命令先 `source scripts/device/setup_env.sh`

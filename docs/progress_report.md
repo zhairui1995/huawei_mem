@@ -9,24 +9,28 @@
 在 Windows 主机端，通过 hdc 连接鸿蒙 PC（HUAWEI MateBook Pro HAD-W32），
 对目标应用进程做**单次内存页快照采集**，输出 CSV 供后续分析。
 
-**一句话**：一个 C 程序（memcap），通过 hdc 推到鸿蒙设备上运行，
+./scripts/device/collect.sh 42820 斗鱼   # 输入 PID + 应用名
 读取 /proc/[pid]/maps + smaps + pagemap，生成 6 张 CSV 表。
 
----
-
+./scripts/device/collect.sh 斗鱼          # 只需应用名，自动找 PID
+./scripts/device/collect.sh 斗鱼 --all   # 一键采集斗鱼所有子进程
 ## 二、当前进度
 
-### 2.1 已完成
 
 | 模块 | 状态 | 说明 |
 |------|:----:|------|
 | memcap.c 核心程序 | ✅ v0.2 | C11，零警告编译，交叉编译为 aarch64 ELF |
-| 一键采集脚本 | ✅ | scripts/collect.sh，编译→推送→采集→拉回全自动 |
+| 一键采集脚本 | ✅ | scripts/device/collect.sh，编译→推送→采集→拉回全自动 |
 | 6 张 CSV 表 | ✅ | app_list / operation_list / snapshot_index / vma / pagemap / future_need_label |
 | maps 解析 | ✅ | parse_maps()，最多 200,000 个 VMA |
 | smaps 解析 | ✅ | parse_smaps()，按地址区间合并 Rss/Pss/Referenced/Anonymous/Swap/VmFlags |
 | pagemap 按 VMA 聚合 | ✅ | scan_pagemap()，聚合 present/swapped/file_shared/exclusive/soft_dirty |
-| page_size 动态获取 | ✅ | sysconf(_SC_PAGESIZE)，不写死 4096 |
+│   ├── device/
+│   │   └── collect.sh          # 一键采集脚本
+│   ├── analysis/
+│   │   └── analyze_memory.py  # 对比分析脚本
+│   └── pipeline/
+│       └── run_first_stage.sh  # 流水线入口脚本
 | 权限失败容错 | ✅ | pagemap 打不开时 scan_status=open_pagemap_failed，不崩溃 |
 | 并发写入保护 | ✅ | VMA/pagemap 先写 .tmp.PID 临时文件，写完再追加到共享 CSV |
 | 斗鱼首次采集 | ✅ | 主进程 + GPU 进程，8644 行数据 |
@@ -54,11 +58,11 @@
 ```bash
 # 旧方式（繁琐）
 hdc shell "ps -A | grep douyu"    # 手动找 PID
-./scripts/collect.sh 42820 斗鱼   # 输入 PID + 应用名
+./scripts/device/collect.sh 42820 斗鱼   # 输入 PID + 应用名
 
 # 新方式（改进中）
-./scripts/collect.sh 斗鱼          # 只需应用名，自动找 PID
-./scripts/collect.sh 斗鱼 --all   # 一键采集斗鱼所有子进程
+./scripts/device/collect.sh 斗鱼          # 只需应用名，自动找 PID
+./scripts/device/collect.sh 斗鱼 --all   # 一键采集斗鱼所有子进程
 ```
 
 ---
@@ -80,17 +84,17 @@ hdc shell "ps -A | grep douyu"    # 手动找 PID
 ### Phase 1：降低采集操作门槛（本周）
 
 1. **进程名自动查找 PID**
-   - collect.sh 接受进程名（如 `douyu`），自动 `hdc shell pidof` 查找 PID
+   - scripts/device/collect.sh 接受进程名（如 `douyu`），自动 `hdc shell pidof` 查找 PID
    - 支持模糊匹配（`斗鱼` → `com.douyu.ho.app`）
 
 2. **交互式采集会话**
-   - `collect.sh --session 斗鱼`
+   - `scripts/device/collect.sh --session 斗鱼`
    - 启动后自动查 PID → 做第一次快照 → 等待用户按 Enter → 做第二次快照 → ...
    - 每次快照前用户输入操作描述（如"点击播放按钮"），自动记入 operation_list.csv
    - 连续 10 次操作只需启动脚本一次，中间按 Enter 即可
 
 3. **单命令采集所有子进程**
-   - `collect.sh 斗鱼 --all`：自动找到 斗鱼 的所有子进程，逐个采集
+   - `scripts/device/collect.sh 斗鱼 --all`：自动找到 斗鱼 的所有子进程，逐个采集
 
 ### Phase 2：分析能力提升（下周）
 
@@ -121,17 +125,22 @@ huawei_mem/
 ├── CLAUDE.md                   # 项目规则文档
 ├── .gitignore
 ├── scripts/
-│   └── collect.sh              # 一键采集脚本
+│   ├── device/
+│   │   └── collect.sh          # 一键采集脚本
+│   ├── analysis/
+│   │   └── analyze_memory.py   # 对比分析脚本
+│   └── pipeline/
+│       └── run_first_stage.sh  # 流水线入口脚本
 ├── docs/
 │   ├── progress_report.md      # 本文件 — 项目进展报告
 │   └── report_001_douyu.md     # 斗鱼内存快照采集报告
 └── memcap_out/                 # 采集结果（不纳入版本管理）
-    ├── snapshot_index.csv
-    ├── vma_memory_snapshot.csv
-    ├── pagemap_snapshot.csv
-    ├── app_list.csv
-    ├── operation_list.csv
-    └── future_need_label.csv
+   ├── snapshot_index.csv
+   ├── vma_memory_snapshot.csv
+   ├── pagemap_snapshot.csv
+   ├── app_list.csv
+   ├── operation_list.csv
+   └── future_need_label.csv
 ```
 
 ---
@@ -146,7 +155,7 @@ hdc shell "ps -A -o PID,ARGS"
 hdc shell "pidof com.douyu.ho.app"
 
 # 一键采集
-./scripts/collect.sh <PID> <应用名>
+./scripts/device/collect.sh <PID> <应用名>
 
 # 查看采集结果
 cat memcap_out/snapshot_index.csv

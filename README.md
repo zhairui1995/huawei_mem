@@ -44,7 +44,7 @@ cd huawei_mem
 ### 2. 初始化环境
 
 ```bash
-source scripts/setup_env.sh
+source scripts/device/setup_env.sh
 ```
 
 验证连接：
@@ -65,13 +65,13 @@ hdc shell "ps -A -o PID,ARGS" | grep -i douyu
 #      9830 com.douyu.ho.app:gpu
 
 # 一行采集（按进程名搜索）
-bash scripts/collect.sh douyu
+bash scripts/device/collect.sh douyu
 
 # 或指定 PID + 应用标签
-bash scripts/collect.sh 9376 斗鱼
+bash scripts/device/collect.sh 9376 斗鱼
 
 # 采集所有子进程（主进程 + GPU 进程）
-bash scripts/collect.sh douyu --all
+bash scripts/device/collect.sh douyu --all
 ```
 
 脚本自动完成：编译 → 推送 → 采集 → 拉回，结果保存在 `memcap_out/`。
@@ -82,12 +82,13 @@ bash scripts/collect.sh douyu --all
 
 ```bash
 # 第一次：前台正常状态
-bash scripts/collect.sh douyu
+# use device collect wrapper
+bash scripts/device/collect.sh douyu
 
 # 用户在设备上操作（最小化、切换直播间等）...
 
 # 第二次：后台状态（PID 不变）
-bash scripts/collect.sh 9376 斗鱼 -f background -o op_switch_room
+bash scripts/device/collect.sh 9376 斗鱼 -f background -o op_switch_room
 ```
 
 ### 5. 重启后采集（PID 变化场景）
@@ -98,20 +99,20 @@ bash scripts/collect.sh 9376 斗鱼 -f background -o op_switch_room
 hdc shell "ps -A -o PID,ARGS" | grep -i douyu
 
 # 第三次：重启后前台（新 PID）
-bash scripts/collect.sh 25797 斗鱼 -f foreground -o op_restart
+bash scripts/device/collect.sh 25797 斗鱼 -f foreground -o op_restart
 ```
 
 ### 6. 对比分析
 
 ```bash
 # 同 PID 对比（exact 模式）：VMA 按地址精确匹配
-python3 scripts/analyze_memory.py -i memcap_out/ --pid 9376
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --pid 9376
 
 # 跨 PID 对比（fuzzy 模式）：VMA 按路径+类型+权限语义匹配
-python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.8
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.8
 
 # 指定快照对比
-python3 scripts/analyze_memory.py -i memcap_out/ \
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ \
     --sample sample_20260525_024423 sample_20260525_024937 sample_20260525_025620
 ```
 
@@ -146,9 +147,13 @@ python3 scripts/analyze_memory.py -i memcap_out/ \
 huawei_mem/
 ├── memcap.c                         # 设备端 C 采集程序（C11, 342行）
 ├── scripts/
-│   ├── setup_env.sh                 # 环境初始化（sourced）
-│   ├── collect.sh                   # 一键采集脚本（bash）
-│   └── analyze_memory.py            # 跨快照对比分析（Python3）
+│   ├── device/
+│   │   ├── setup_env.sh             # 环境初始化（sourced，hdc helpers）
+│   │   └── collect.sh               # 一键采集脚本（bash）
+│   ├── analysis/
+│   │   └── analyze_memory.py        # 跨快照对比分析（Python3）
+│   └── pipeline/
+│       └── run_first_stage.sh       # 第一阶段流水线入口脚本
 ├── docs/
 │   ├── douyu_experiment_report.html # 斗鱼三次采集实验报告（浏览器打开）
 │   ├── progress_dashboard.html      # 项目进展可视化看板
@@ -163,7 +168,7 @@ huawei_mem/
 ## 注意事项
 
 - **USB 调试**：鸿蒙设备需在 设置→开发者选项 中开启 USB 调试
-- **hdc PATH**：每次新终端需 `source scripts/setup_env.sh`，或写入 `~/.zshrc`
+- **hdc PATH**：每次新终端需 `source scripts/device/setup_env.sh`，或写入 `~/.zshrc`
 - **memcap 一次编译即可**：后续采集加 `--no-push` 跳过编译推送，节省时间
 - **不要同时采集同一 out_dir**：snapshot_index 追加可能交叉
 - **pagemap 需要 root 权限读取 PFN**：当前不加 CAP_SYS_ADMIN，PFN 字段被置零

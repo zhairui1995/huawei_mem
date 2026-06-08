@@ -237,20 +237,21 @@ persistence_score = persistence / len(snapshots)
 
 ```bash
 # 基本用法：自动检测模式
-python3 scripts/analyze_memory.py -i memcap_out/
+# Basic usage: auto-detect mode
+python3 scripts/analysis/analyze_memory.py -i memcap_out/
 
 # 指定 PID 过滤
-python3 scripts/analyze_memory.py -i memcap_out/ --pid 9376
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --pid 9376
 
 # 跨重启模糊匹配
-python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.7
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --mode fuzzy --threshold 0.7
 
 # 指定快照子集
-python3 scripts/analyze_memory.py -i memcap_out/ \
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ \
     --sample sample_001 sample_002 sample_003
 
 # 完整输出（不截断 Hot 列表）
-python3 scripts/analyze_memory.py -i memcap_out/ --full
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --full
 ```
 
 ---
@@ -313,28 +314,28 @@ pagemap 是二进制文件。读取 1200 万虚拟页（斗鱼主进程）需要
 ### 5.1 单次采集
 
 ```bash
-source scripts/setup_env.sh
-bash scripts/collect.sh douyu
+source scripts/device/setup_env.sh
+bash scripts/device/collect.sh douyu
 ```
 
 ### 5.2 多快照对比实验（完整流程）
 
 ```bash
 # 1. 初始快照
-bash scripts/collect.sh douyu -o op_init -f foreground
+bash scripts/device/collect.sh douyu -o op_init -f foreground
 
 # 2. 用户操作后（不关闭应用）
 #    在设备上操作：切换直播间、最小化等
-bash scripts/collect.sh <PID> 斗鱼 -o op_action -f background
+bash scripts/device/collect.sh <PID> 斗鱼 -o op_action -f background
 
 # 3. 重启后
 #    关闭并重新打开斗鱼
 hdc shell "ps -A -o PID,ARGS" | grep douyu  # 获取新 PID
-bash scripts/collect.sh <新PID> 斗鱼 -o op_restart -f foreground
+bash scripts/device/collect.sh <新PID> 斗鱼 -o op_restart -f foreground
 
 # 4. 分析
-python3 scripts/analyze_memory.py -i memcap_out/ --pid <PID>
-python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --pid <PID>
+python3 scripts/analysis/analyze_memory.py -i memcap_out/ --mode fuzzy
 ```
 
 ### 5.3 结果解读
@@ -353,7 +354,7 @@ python3 scripts/analyze_memory.py -i memcap_out/ --mode fuzzy
 | 问题 | 排查步骤 |
 |------|---------|
 | `hdc list targets` 为空 | 1. USB 线是否数据线 2. 设备是否开启 USB 调试 3. `hdc kill && hdc start` 重启服务 |
-| 编译失败 "clang not found" | `source scripts/setup_env.sh` 或检查 DevEco Studio SDK 是否下载 |
+| 编译失败 "clang not found" | `source scripts/device/setup_env.sh` 或检查 DevEco Studio SDK 是否下载 |
 | 采集失败 "open_maps_failed" | PID 是否正确、进程是否仍在运行 |
 | pagemap 全是 0 | 检查 `/proc/pid/pagemap` 权限（`ls -la`），可能需要 root |
 | analyze_memory.py 报快照不足 | `--min-snapshots 1` 降低阈值，或先多采集几次 |
