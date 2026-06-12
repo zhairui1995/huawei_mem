@@ -19,6 +19,8 @@ memcap_out/
 .hypium-home/
 hypium/reports/
 hypium/logs/
+hypium/tmp_hypium/
+hypium/resource/baseline/
 __pycache__/
 *.pyc
 
