@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<user_config>
+    <environment>
+        <device type="usb-hdc" label="ohos">
+            <info ip="" port="" sn="" alias="" />
+        </device>
+    </environment>
+    <testcases>
+        <dir>testcases</dir>
+    </testcases>
+    <resource>
+        <dir>resource</dir>
+    </resource>
+    <devicelog>
+        <enable>ON</enable>
+        <loglevel>INFO</loglevel>
+        <dir />
+    </devicelog>
+    <loglevel>INFO</loglevel>
+    <taskargs>
+        <agent_mode>auto</agent_mode>
+        <install_user0>false</install_user0>
+        <pass_through />
+        <repeat />
+        <screenshot>true</screenshot>
+        <screenrecorder>false</screenrecorder>
+        <batch_run_size />
+        <max_driver_threads />
+        <max_log_line_in_html />
+    </taskargs>
+</user_config>

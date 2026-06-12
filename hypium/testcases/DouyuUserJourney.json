@@ -1,0 +1,12 @@
+{
+    "environment": [
+        {
+            "type": "device",
+            "label": "2in1"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": "DouyuUserJourney.py"
+    }
+}
