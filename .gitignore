@@ -17,3 +17,20 @@ memcap_out/
 # OS
 .DS_Store
 Thumbs.db
+
+# 大文件归档
+*.tar.zst
+*.tar.gz
+*.tar.xz
+*.zip
+*.7z
+
+# 构建产物 / 日志
+*.log
+build/
+
+# Linux 内核源码（仅用于参考，不应入库）
+lzx/MGLRU-test/v0/mglru_kernel_transfer/linux-hwe-6.17-6.17.0/
+
+# 内核构建产物
+lzx/MGLRU-test/v0/mglru_kernel_transfer/linux-hwe-6.17-mglru-build/
