@@ -30,11 +30,14 @@ def evaluate(model: OpMarkovModel, test_samples: list[dict], top_k: list[int]) -
             used = 0
             for sample in samples:
                 label = int(sample["label_next_op"])
+                special_ids = model._special_ids(app)
+                if label in special_ids:
+                    continue
                 preds = model.predict_topk(app, sample["history_ops"], k=k)
                 if not preds:
                     continue
-                acc_sum += topk_accuracy(preds, label)
-                mrr_sum += mrr(preds, {label})
+                acc_sum += topk_accuracy(preds, label, ignore_labels=special_ids)
+                mrr_sum += mrr(preds, {label}, ignore_labels=special_ids)
                 used += 1
             if not used:
                 continue

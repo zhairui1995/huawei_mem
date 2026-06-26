@@ -63,6 +63,7 @@ def build_samples(args: argparse.Namespace) -> list[dict]:
 
     samples: list[dict] = []
     horizons = sorted(set(args.horizons))
+    max_horizon = max(horizons)
     for user_id, events in grouped.items():
         events.sort(key=lambda x: x["_timestamp"])
         for idx in range(args.history_len, len(events)):
@@ -76,14 +77,21 @@ def build_samples(args: argparse.Namespace) -> list[dict]:
                 if app in app_vocab:
                     opened_ids.add(int(app_vocab[app]))
 
-            labels_by_horizon: dict[int, set[int]] = {}
-            for horizon in horizons:
-                until = now + timedelta(minutes=horizon)
-                labels_by_horizon[horizon] = {
-                    event["_app_id"]
-                    for event in events[idx + 1 :]
-                    if now < event["_timestamp"] <= until
-                }
+            labels_by_horizon: dict[int, set[int]] = {horizon: set() for horizon in horizons}
+            until_by_horizon = {
+                horizon: now + timedelta(minutes=horizon)
+                for horizon in horizons
+            }
+            max_until = now + timedelta(minutes=max_horizon)
+            for event in events[idx + 1 :]:
+                event_time = event["_timestamp"]
+                if event_time > max_until:
+                    break
+                if event_time <= now:
+                    continue
+                for horizon in horizons:
+                    if event_time <= until_by_horizon[horizon]:
+                        labels_by_horizon[horizon].add(event["_app_id"])
 
             if not any(labels_by_horizon.values()):
                 continue

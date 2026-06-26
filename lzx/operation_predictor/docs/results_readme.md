@@ -1,11 +1,12 @@
-# Results 文件阅读指南
+﻿# Results 文件阅读指南
 
 目的：说明如何快速查看并解读 `outputs/results` 目录下模型评估与样本预览文件。
 
 目录文件说明：
 
-- `app_markov_results.csv`：针对应用（app）级别的评估结果汇总。每行对应一组超参（如马尔可夫阶数、horizon、k）的聚合指标。
-- `op_markov_results.csv`：针对操作（operation）级别的评估结果，格式同上。
+- `v1/app_markov_results.csv`：v1 应用间 Markov 评估结果。每行对应一组超参（如马尔可夫阶数、horizon、k）的聚合指标。
+- `v2/app_lstm_results.csv`：v2 应用间 LSTM 评估结果。每行对应一个 horizon 和 top-k 的聚合指标。
+- `v1/op_markov_results.csv` / `v2/op_markov_results.csv`：应用内 Markov 评估结果，v2 阶段暂时沿用该应用内模型逻辑。
 - `app_samples_preview.csv` / `op_samples_preview.csv`：若干样本的输入/真实标签/模型预测 top-k 示例，用于人工检查样例质量与输出格式。
 - `dataset_preview.html`：数据集的可视化预览，可在浏览器中打开查看分布和示例。
 
@@ -26,14 +27,14 @@
 1. PowerShell（查看前几行）：
 
 ```powershell
-Get-Content lzx\operation_predictor\outputs\results\app_markov_results.csv -TotalCount 12
+Get-Content lzx\operation_predictor\outputs\results\v1\app_markov_results.csv -TotalCount 12
 ```
 
 2. Python（用 pandas 加载并查看统计）：
 
 ```python
 import pandas as pd
-df = pd.read_csv("lzx/operation_predictor/outputs/results/app_markov_results.csv")
+df = pd.read_csv("lzx/operation_predictor/outputs/results/v1/app_markov_results.csv")
 print(df.head())
 print(df.describe())
 ```
@@ -44,10 +45,10 @@ print(df.describe())
 start lzx\operation_predictor\outputs\results\dataset_preview.html
 ```
 
-示例行解读（来自 `app_markov_results.csv`）：
+示例行解读（来自 `v1/app_markov_results.csv`）：
 
 ```
-app_markov,4,10,5,0.3269,0.1811,0.1189,0.1946,52
+v1,app_markov,4,10,5,0.3269,0.1811,0.1189,0.1946,52
 ```
 
 - 含义：使用 `app_markov`（4 阶马尔可夫）、`horizon=10`、`k=5` 时，`hit@5≈0.327`（大约 32.7% 的样本在 top-5 有命中），`MRR≈0.195`，评估样本数为 52。
